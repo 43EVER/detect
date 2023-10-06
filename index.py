@@ -10,6 +10,69 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
+def getRectangularArea(xyxy):
+    x1, y1, x2, y2 = xyxy
+    return (x2-x1) * (y2-y1)
+
+def isInclusion(wspot_xyxy, rectangular_xyxy):
+    x1, y1, x2, y2 = wspot_xyxy
+    x3, y3, x4, y4 = rectangular_xyxy
+    if (x3<=x1<=x4) and (y3<=y1<=y4):
+        return True
+    else:
+        return False
+
+def getAreaDict(r):
+    res = {
+        'TOP': {
+            'area': 23.5,
+            'rectangular_area': None,
+            'xyxy': None,
+        },
+        'MIDDLE': {
+            'area': 22.5,
+            'rectangular_area': None,
+            'xyxy': None,
+        },
+        'BOTTOM': {
+            'area': 31.5,
+            'rectangular_area': None,
+            'xyxy': None,
+        }
+    }
+    for box in r.boxes:
+        box_key = r.names[box.cls.item()]
+        rectangular_xyxy = box.xyxy.numpy().tolist()[0]
+        res[box_key]['rectangular_area'] = getRectangularArea(rectangular_xyxy)
+        res[box_key]['xyxy'] = rectangular_xyxy
+    return res
+
+def getWspotArea(image):
+    model_wspot = YOLO("./best.pt")
+    model_allocate = YOLO("./best_allocate.pt")
+    result_wspot = model_wspot(image, imgsz=1280, device='0')[0].to('cpu')
+    result_allocate = model_allocate(image, imgsz=1280, device='0')[0].to('cpu')
+    
+    # 处理三分区
+    area_dict = getAreaDict(result_allocate)
+
+    # 计算白斑面积占比
+    res_area = []
+    res_region = []
+    for box in result_wspot.boxes:
+        wspot_xyxy = box.xyxy.cpu().numpy().tolist()[0]
+        for key, val in area_dict.items():
+            if isInclusion(wspot_xyxy, val['xyxy']):
+                wspot_area = round(getRectangularArea(wspot_xyxy) / val['rectangular_area'] * val['area'] * 100, 1)
+                res_area.append(wspot_area)
+                res_region.append(key)
+                break
+    
+    # 合成图像
+    image_array = result_wspot.plot(labels=False, boxes=False)
+    image = Image.fromarray(image_array[..., ::-1])
+    return res_area, res_region, image
+
 # base64 编码图像
 def encode_image(image_path):
     with open(image_path, "rb") as image_file:
@@ -35,15 +98,15 @@ def get_maskimage(image):
 def process_json():
     json_post = json.loads(request.get_data())
     image = decode_image(json_post['image_base64'])
-    image_yolo = get_maskimage(image)
+    res_area, res_region, image_yolo = getWspotArea(image)
     image_yolo.save('result.jpg')
     image_base64 = encode_image('result.jpg')
 
     # 回传 json 包
     data = {
         'image_base64': image_base64,
-        'area': '6.66', # 面积
-        'region': 'A1', # 区域
+        'area': res_area, # 面积
+        'region': res_region, # 区域
     }
     json_response = json.dumps(data)
     return json_response, 200, {"Content-Type":"application/json"}
