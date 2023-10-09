@@ -10,9 +10,8 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-def getRectangularArea(xyxy):
-    x1, y1, x2, y2 = xyxy
-    return (x2-x1) * (y2-y1)
+def getRectangularArea(masks_data):
+    return masks_data.sum().item()
 
 def isInclusion(wspot_xyxy, rectangular_xyxy):
     x1, y1, x2, y2 = wspot_xyxy
@@ -40,15 +39,15 @@ def getAreaDict(r):
             'xyxy': None,
         }
     }
-    for box in r.boxes:
+    for index, box in enumerate(r.boxes):
         box_key = r.names[box.cls.item()]
         rectangular_xyxy = box.xyxy.numpy().tolist()[0]
-        res[box_key]['rectangular_area'] = getRectangularArea(rectangular_xyxy)
+        res[box_key]['rectangular_area'] = getRectangularArea(r.masks.data[index])
         res[box_key]['xyxy'] = rectangular_xyxy
     return res
 
 def getWspotArea(image):
-    model_wspot = YOLO("./best.pt")
+    model_wspot = YOLO("./best_wspot.pt")
     model_allocate = YOLO("./best_allocate.pt")
     result_wspot = model_wspot(image, imgsz=1280, device='0')[0].to('cpu')
     result_allocate = model_allocate(image, imgsz=1280, device='0')[0].to('cpu')
@@ -59,11 +58,11 @@ def getWspotArea(image):
     # 计算白斑面积占比
     res_area = []
     res_region = []
-    for box in result_wspot.boxes:
+    for index, box in enumerate(result_wspot.boxes):
         wspot_xyxy = box.xyxy.cpu().numpy().tolist()[0]
         for key, val in area_dict.items():
             if isInclusion(wspot_xyxy, val['xyxy']):
-                wspot_area = round(getRectangularArea(wspot_xyxy) / val['rectangular_area'] * val['area'] * 100, 1)
+                wspot_area = round(getRectangularArea(result_wspot.masks.data[index]) / val['rectangular_area'] * val['area'] * 100, 1)
                 res_area.append(wspot_area)
                 res_region.append(key)
                 break
