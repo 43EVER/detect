@@ -48,10 +48,10 @@ def getAreaDict(r):
     return res
 
 def getWspotArea(image):
-    model_wspot = YOLO("./best_wspot.pt")
+    model_wspot = YOLO("./best.pt")
     model_allocate = YOLO("./best_allocate.pt")
-    result_wspot = model_wspot(image, imgsz=1280, device='0')[0].to('cpu')
-    result_allocate = model_allocate(image, imgsz=1280, device='0')[0].to('cpu')
+    result_wspot = model_wspot(image, imgsz=1280, device='cpu')[0]
+    result_allocate = model_allocate(image, imgsz=1280, device='cpu')[0]
     
     # 处理三分区
     area_dict = getAreaDict(result_allocate)
