@@ -1,2 +1,4 @@
 ultralytics==8.0.181
 flask
+cos-python-sdk-v5
+requests

@@ -3,6 +3,7 @@ import json
 import base64
 import requests
 import sys
+import wx
 
 from PIL import Image
 from ultralytics import YOLO
@@ -74,15 +75,12 @@ def getWspotArea(image):
 
 # base64 编码图像
 def encode_image(image_path):
-    with open(image_path, "rb") as image_file:
-        image_data = image_file.read()
-    encoded_data = base64.b64encode(image_data)
-    return encoded_data.decode("utf-8")
+    return wx.upload_file(image_path)
 
-# base64 解码图像
-def decode_image(encoded_data):
-    image_data = base64.b64decode(encoded_data)
-    image = Image.open(io.BytesIO(image_data))
+# 通过 image_id 拿到 image
+def decode_image(image_id):
+    image_data = wx.get_file_by_id(image_id)
+    image = Image.open(image_data)
     return image
 
 # yolo白斑检测
@@ -96,14 +94,15 @@ def get_maskimage(image):
 @app.route('/process_json', methods=['GET', 'POST'])
 def process_json():
     json_post = json.loads(request.get_data())
-    image = decode_image(json_post['image_base64'])
+    image = decode_image(json_post['image_id'])
+    
     res_area, res_region, image_yolo = getWspotArea(image)
     image_yolo.save('result.jpg')
-    image_base64 = encode_image('result.jpg')
+    image_id = encode_image('result.jpg')
 
     # 回传 json 包
     data = {
-        'image_base64': image_base64,
+        'image_id': image_id,
         'area': res_area, # 面积
         'region': res_region, # 区域
     }
@@ -113,15 +112,15 @@ def process_json():
 @app.route('/', methods=['GET'])
 def index():
     # 构建测试 json 包
-    image_base64 = encode_image('./test.jpg')
+    image_id = encode_image('./test.jpg')
     data = {
-        'image_base64': image_base64
+        'image_id': image_id
     }
     json_post = json.dumps(data)
     response = requests.post(f'http://{sys.argv[1]}:{sys.argv[2]}/process_json', data=json_post)
 
     # 拿到回传结果解析图像
     json_result = json.loads(response.text)
-    image = decode_image(json_result['image_base64'])
+    image = decode_image(json_result['image_id'])
     image.save('result1.jpg')
     return 'hello word'
