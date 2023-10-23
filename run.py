@@ -1,6 +1,6 @@
 # 创建应用实例
 import sys
-from index import app
+from app import app
 
 # 启动Flask Web服务
 if __name__ == '__main__':

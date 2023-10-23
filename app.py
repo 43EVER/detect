@@ -11,6 +11,23 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
+import threading
+
+class ResourcePool:
+    def __init__(self, initial_resources):
+        self.resources = initial_resources
+        self.lock = threading.Lock()
+
+    def get_resource(self):
+        with self.lock:
+            if not self.resources:
+                raise Exception("No resources available")
+            return self.resources.pop()
+
+    def return_resource(self, resource):
+        with self.lock:
+            self.resources.append(resource)
+
 def getRectangularArea(masks_data):
     return masks_data.sum().item()
 
@@ -47,9 +64,13 @@ def getAreaDict(r):
         res[box_key]['xyxy'] = rectangular_xyxy
     return res
 
+res = []
+for _ in range(1):
+    res.append((YOLO("./best.pt"), YOLO("./best_allocate.pt")))
+rsp = ResourcePool(res)
+
 def getWspotArea(image):
-    model_wspot = YOLO("./best.pt")
-    model_allocate = YOLO("./best_allocate.pt")
+    model_wspot, model_allocate = rsp.get_resource()
     result_wspot = model_wspot(image, imgsz=1280, device='cpu')[0]
     result_allocate = model_allocate(image, imgsz=1280, device='cpu')[0]
     
@@ -71,6 +92,7 @@ def getWspotArea(image):
     # 合成图像
     image_array = result_wspot.plot(labels=False, boxes=False)
     image = Image.fromarray(image_array[..., ::-1])
+    rsp.return_resource((model_wspot, model_allocate))
     return res_area, res_region, image
 
 # base64 编码图像
@@ -81,14 +103,6 @@ def encode_image(image_path):
 def decode_image(image_id):
     image_data = wx.get_file_by_id(image_id)
     image = Image.open(image_data)
-    return image
-
-# yolo白斑检测
-def get_maskimage(image):
-    model = YOLO("./best.pt")
-    result = model(image, imgsz=1280, device='cpu')[0]
-    image_array = result = result.plot(labels=False, boxes=True)
-    image = Image.fromarray(image_array[..., ::-1])
     return image
 
 @app.route('/process_json', methods=['GET', 'POST'])
