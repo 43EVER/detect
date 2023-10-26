@@ -21,7 +21,7 @@ class ResourcePool:
     def get_resource(self):
         with self.lock:
             if not self.resources:
-                raise Exception("No resources available")
+                self.resources.append((YOLO("./best.pt"), YOLO("./best_allocate.pt")))
             return self.resources.pop()
 
     def return_resource(self, resource):
@@ -52,7 +52,7 @@ def getAreaDict(r):
             'xyxy': None,
         },
         'BOTTOM': {
-            'area': 31.5,
+            'area': 28.8,
             'rectangular_area': None,
             'xyxy': None,
         }
@@ -65,7 +65,7 @@ def getAreaDict(r):
     return res
 
 res = []
-for _ in range(1):
+for _ in range(5):
     res.append((YOLO("./best.pt"), YOLO("./best_allocate.pt")))
 rsp = ResourcePool(res)
 
@@ -73,6 +73,7 @@ def getWspotArea(image):
     model_wspot, model_allocate = rsp.get_resource()
     result_wspot = model_wspot(image, imgsz=1280, device='cpu')[0]
     result_allocate = model_allocate(image, imgsz=1280, device='cpu')[0]
+    rsp.return_resource((model_wspot, model_allocate))
     
     # 处理三分区
     area_dict = getAreaDict(result_allocate)
@@ -90,9 +91,8 @@ def getWspotArea(image):
                 break
     
     # 合成图像
-    image_array = result_wspot.plot(labels=False, boxes=False)
+    image_array = result_wspot.plot(labels=False, boxes=True)
     image = Image.fromarray(image_array[..., ::-1])
-    rsp.return_resource((model_wspot, model_allocate))
     return res_area, res_region, image
 
 # base64 编码图像
